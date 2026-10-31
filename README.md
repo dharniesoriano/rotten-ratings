@@ -17,6 +17,11 @@ Log into the same Stremio account on your TV and the addon syncs over.
 Rows from this addon show posters with RT and Letterboxd badges baked in, served from `/poster/<imdb-id>.jpg`.
 Set `PUBLIC_URL` to your public address (render.yaml does this). The font is Inter (SIL OFL, see FONT-LICENSE.txt).
 
+## Always ready
+The server pings its own public address every 10 minutes so Render's free plan never puts it to sleep,
+and pre-builds every row plus the first 40 posters of each after each restart and every 12 hours.
+Set `KEEP_AWAKE=off` to disable. One always-on service uses ~744 of Render's 750 free hours a month.
+
 ## Notes
 - Free Render servers sleep after ~15 idle minutes, so the first load after a nap can take up to a minute.
 - Keep your URL private: your key is baked in (1,000 OMDb calls/day free).

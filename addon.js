@@ -33,7 +33,7 @@ if (MDBLIST_KEY) {
 
 const manifest = {
   id: "community.rotten.ratings",
-  version: "1.4.1",
+  version: "1.5.0",
   name: "Rotten Ratings 🍅",
   description: "Popular titles re-ranked by Tomatometer and Letterboxd, with year filters, plus a ratings card on every movie and show.",
   logo: "https://em-content.zobj.net/source/apple/391/tomato_1f345.png",

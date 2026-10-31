@@ -3,11 +3,14 @@ const { getRouter } = require("stremio-addon-sdk");
 const landingTemplate = require("stremio-addon-sdk/src/landingTemplate");
 const addonInterface = require("./addon");
 const { renderPoster } = require("./poster");
+const { startKeepAwake, startWarmCycle } = require("./keepalive");
 
 const PORT = Number(process.env.PORT) || 7000;
 const app = express();
 
 app.use(getRouter(addonInterface));
+
+app.get("/health", (_, res) => res.type("text").set("Cache-Control", "no-store").send("ok"));
 
 // Rated posters: /poster/tt0111161.jpg?rt=91&lb=4.6
 app.get("/poster/:id.jpg", async (req, res) => {
@@ -34,4 +37,8 @@ app.get("/poster/:id.jpg", async (req, res) => {
 const landing = landingTemplate(addonInterface.manifest);
 app.get(["/", "/configure"], (_, res) => res.type("html").send(landing));
 
-app.listen(PORT, () => console.log(`HTTP addon accessible at: http://127.0.0.1:${PORT}/manifest.json`));
+app.listen(PORT, () => {
+  console.log(`HTTP addon accessible at: http://127.0.0.1:${PORT}/manifest.json`);
+  startKeepAwake();
+  startWarmCycle(addonInterface.manifest.catalogs);
+});
