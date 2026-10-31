@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: rotten-ratings
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: OMDB_API_KEY
+        sync: false # Render asks you for this during setup
