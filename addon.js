@@ -41,6 +41,8 @@ builder.defineCatalogHandler(async ({ type, extra = {}, config }) => {
   const list = (await getRanked(type, key)).filter(m => m._rt >= min);
   const metas = list.slice(skip, skip + 100).map(({ _rt, ...meta }) => meta);
 
+  // Never let Stremio cache an empty answer: it would hide a fix for hours.
+  if (!metas.length) return { metas: [], cacheMaxAge: 0 };
   return { metas, cacheMaxAge: 6 * 3600, staleRevalidate: 24 * 3600 };
 });
 

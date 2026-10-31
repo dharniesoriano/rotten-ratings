@@ -12,7 +12,10 @@ async function fetchPool(type, size) {
   while (seen.size < size) {
     const url = `${CINEMETA}/catalog/${type}/top${skip ? `/skip=${skip}` : ""}.json`;
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) break;
+    if (!res.ok) {
+      console.warn(`[cinemeta] ${type}: HTTP ${res.status} for ${url}`);
+      break;
+    }
     const { metas = [] } = await res.json();
     if (!metas.length) break;
     skip += metas.length;
@@ -40,6 +43,9 @@ async function mapLimit(items, limit, fn) {
 async function build(type, apiKey) {
   const pool = await fetchPool(type, POOL_SIZE);
   const rows = await mapLimit(pool, 5, async meta => ({ meta, r: await getRatings(meta.id, apiKey) }));
+  const found = rows.filter(x => x.r).length;
+  const scored = rows.filter(x => x.r && x.r.rt != null).length;
+  console.log(`[catalog] ${type}: ${pool.length} popular titles, ${found} found on OMDb, ${scored} with RT scores`);
 
   return rows
     .filter(x => x.r && x.r.rt != null)
