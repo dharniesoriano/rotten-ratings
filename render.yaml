@@ -10,3 +10,5 @@ services:
         sync: false # Render asks you for this during setup
       - key: MDBLIST_API_KEY
         sync: false # optional: enables the Letterboxd list
+      - key: PUBLIC_URL
+        value: https://rotten-ratings.onrender.com # where the TV fetches rated posters

@@ -13,6 +13,10 @@ Log into the same Stremio account on your TV and the addon syncs over.
 ## Run locally instead
 `npm install && OMDB_API_KEY=yourkey npm start`, then install `http://127.0.0.1:7000/manifest.json`.
 
+## Rated posters
+Rows from this addon show posters with RT and Letterboxd badges baked in, served from `/poster/<imdb-id>.jpg`.
+Set `PUBLIC_URL` to your public address (render.yaml does this). The font is Inter (SIL OFL, see FONT-LICENSE.txt).
+
 ## Notes
 - Free Render servers sleep after ~15 idle minutes, so the first load after a nap can take up to a minute.
 - Keep your URL private: your key is baked in (1,000 OMDb calls/day free).

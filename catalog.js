@@ -1,9 +1,12 @@
 const { getRatings } = require("./omdb");
 const { getLetterboxd } = require("./mdblist");
+const { registerSource } = require("./poster");
 
 const CINEMETA = "https://v3-cinemeta.strem.io";
 const POOL_SIZE = Number(process.env.POOL_SIZE) || 100; // titles re-ranked per list
 const TTL_MS = 12 * 60 * 60 * 1000;
+const PUBLIC_URL = (process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL ||
+  `http://127.0.0.1:${Number(process.env.PORT) || 7000}`).replace(/\/$/, "");
 const ranked = new Map(); // "metric:type:source:year" -> { at, promise }
 
 // How each list scores and labels a title.
@@ -74,21 +77,41 @@ async function build(metric, type, source, year, keys) {
   const rows = (await mapLimit(pool, 5, async meta => ({ meta, s: await m.score(meta.id, keys) }))).filter(x => x.s);
   console.log(`[catalog] ${metric} ${type} ${year || source}: ${pool.length} popular titles, ${rows.length} with ${m.label} scores`);
 
-  return rows
-    .sort((a, b) => b.s.score - a.s.score || (b.s.extra || 0) - (a.s.extra || 0))
-    .map(({ meta, s }, i) => ({
+  rows.sort((a, b) => b.s.score - a.s.score || (b.s.extra || 0) - (a.s.extra || 0));
+
+  // Both scores go on every poster, so fetch whichever one this list didn't rank by.
+  // Both lookups are cached for 24h, so overlapping lists cost nothing extra.
+  await mapLimit(rows, 5, async row => {
+    if (metric === "rt") {
+      row.rt = row.s.score;
+      const lb = type === "movie" && keys.mdblist ? await getLetterboxd(row.meta.id, keys.mdblist) : null;
+      row.lb = lb ? lb.value : null;
+    } else {
+      row.lb = row.s.score;
+      const r = keys.omdb ? await getRatings(row.meta.id, keys.omdb) : null;
+      row.rt = r && r.rt != null ? r.rt : null;
+    }
+  });
+
+  return rows.map(({ meta, s, rt, lb }, i) => {
+    registerSource(meta.id, meta.poster);
+    const q = [rt != null && `rt=${rt}`, lb != null && `lb=${lb}`].filter(Boolean).join("&");
+    const scores = [rt != null && `🍅 ${rt}%`, lb != null && `🎞 ${lb.toFixed(1)}/5`].filter(Boolean).join(" · ");
+    return {
       id: meta.id,
       type,
       name: meta.name,
-      poster: meta.poster,
+      poster: `${PUBLIC_URL}/poster/${meta.id}.jpg${q ? `?${q}` : ""}`,
+      posterShape: "poster",
       background: meta.background,
       logo: meta.logo,
       genres: meta.genres,
       imdbRating: meta.imdbRating,
       releaseInfo: `${m.badge(s)}${meta.releaseInfo ? ` · ${meta.releaseInfo}` : ""}`,
-      description: [`#${i + 1} by ${m.label} · ${m.line(s)}`, meta.description || ""].join("\n\n").trim(),
+      description: [`#${i + 1} by ${m.label} · ${scores}`, meta.description || ""].join("\n\n").trim(),
       _score: s.score,
-    }));
+    };
+  });
 }
 
 async function getRanked(metric, type, keys, { source = "top", year = "" } = {}) {
