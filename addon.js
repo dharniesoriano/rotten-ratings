@@ -1,8 +1,10 @@
 const { addonBuilder } = require("stremio-addon-sdk");
 const { getRatings } = require("./omdb");
+const { getLetterboxd } = require("./mdblist");
 const { getRanked } = require("./catalog");
 
 const ENV_KEY = process.env.OMDB_API_KEY || "";
+const MDBLIST_KEY = (process.env.MDBLIST_API_KEY || "").trim();
 const TIERS = { "All scores": 0, "90%+ Must-See": 90, "75%+ Fresh": 75, "60%+ Fresh": 60 };
 
 // Newest year first, so the Board row shows this year's releases by default.
@@ -18,21 +20,27 @@ const yearExtra = [
   { name: "skip", isRequired: false },
 ];
 
+const catalogs = [
+  { type: "movie", id: "rt-movies-v2", name: "🍅 Tomatometer Top", extra: tierExtra },
+  { type: "series", id: "rt-series-v2", name: "🍅 Tomatometer Top", extra: tierExtra },
+  { type: "movie", id: "rt-year-movies", name: "🍅 Best by Year", extra: yearExtra },
+  { type: "series", id: "rt-year-series", name: "🍅 Best by Year", extra: yearExtra },
+];
+// Letterboxd only covers films, and only appears once an MDBList key is set.
+if (MDBLIST_KEY) {
+  catalogs.push({ type: "movie", id: "lb-year-movies", name: "🎞 Letterboxd Best by Year", extra: yearExtra });
+}
+
 const manifest = {
   id: "community.rotten.ratings",
-  version: "1.1.0",
+  version: "1.2.0",
   name: "Rotten Ratings 🍅",
-  description: "Popular titles re-ranked by Tomatometer, plus a ratings card (RT · IMDb · Metacritic) on every movie and show.",
+  description: "Popular titles re-ranked by Tomatometer and Letterboxd, with year filters, plus a ratings card on every movie and show.",
   logo: "https://em-content.zobj.net/source/apple/391/tomato_1f345.png",
   resources: ["catalog", "stream"],
   types: ["movie", "series"],
   idPrefixes: ["tt"],
-  catalogs: [
-    { type: "movie", id: "rt-movies-v2", name: "🍅 Tomatometer Top", extra: tierExtra },
-    { type: "series", id: "rt-series-v2", name: "🍅 Tomatometer Top", extra: tierExtra },
-    { type: "movie", id: "rt-year-movies", name: "🍅 Best by Year", extra: yearExtra },
-    { type: "series", id: "rt-year-series", name: "🍅 Best by Year", extra: yearExtra },
-  ],
+  catalogs,
   config: [
     { key: "omdbKey", type: "text", title: "Your OMDb API key (free at omdbapi.com/apikey.aspx)", required: !ENV_KEY },
   ],
@@ -40,23 +48,29 @@ const manifest = {
 };
 
 const builder = new addonBuilder(manifest);
-const keyFrom = config => (config && config.omdbKey) || ENV_KEY;
+const keysFrom = config => ({
+  omdb: ((config && config.omdbKey) || ENV_KEY).trim(),
+  mdblist: MDBLIST_KEY,
+});
 
 builder.defineCatalogHandler(async ({ type, id, extra = {}, config }) => {
-  const key = keyFrom(config);
-  if (!key) return { metas: [] };
-
+  const keys = keysFrom(config);
   const skip = Number(extra.skip) || 0;
-  let list;
-  if (id.startsWith("rt-year")) {
-    const year = YEARS.includes(extra.genre) ? extra.genre : YEARS[0];
-    list = await getRanked(type, key, { source: "year", year });
-  } else {
-    const min = TIERS[extra.genre] || 0;
-    list = (await getRanked(type, key)).filter(m => m._rt >= min);
-  }
-  const metas = list.slice(skip, skip + 100).map(({ _rt, ...meta }) => meta);
+  const year = YEARS.includes(extra.genre) ? extra.genre : YEARS[0];
+  let list = [];
 
+  if (id === "lb-year-movies") {
+    if (keys.mdblist) list = await getRanked("lb", type, keys, { source: "year", year });
+  } else if (keys.omdb) {
+    if (id.startsWith("rt-year")) {
+      list = await getRanked("rt", type, keys, { source: "year", year });
+    } else {
+      const min = TIERS[extra.genre] || 0;
+      list = (await getRanked("rt", type, keys)).filter(m => m._score >= min);
+    }
+  }
+
+  const metas = list.slice(skip, skip + 100).map(({ _score, ...meta }) => meta);
   // Never let Stremio cache an empty answer: it would hide a fix for hours.
   if (!metas.length) return { metas: [], cacheMaxAge: 0 };
   return { metas, cacheMaxAge: 6 * 3600, staleRevalidate: 24 * 3600 };
@@ -68,24 +82,28 @@ function verdict(score) {
   return "Rotten";
 }
 
-builder.defineStreamHandler(async ({ id, config }) => {
-  const key = keyFrom(config);
-  if (!key) return { streams: [] };
+builder.defineStreamHandler(async ({ type, id, config }) => {
+  const keys = keysFrom(config);
+  if (!keys.omdb) return { streams: [] };
 
   const imdbId = id.split(":")[0]; // series episodes arrive as tt123:season:episode
-  const r = await getRatings(imdbId, key);
-  if (!r) return { streams: [] };
+  const [r, lb] = await Promise.all([
+    getRatings(imdbId, keys.omdb),
+    type === "movie" && keys.mdblist ? getLetterboxd(imdbId, keys.mdblist) : null,
+  ]);
+  if (!r && !lb) return { streams: [] };
 
   const lines = [
-    r.rt != null ? `🍅 ${r.rt}% Tomatometer · ${verdict(r.rt)}` : "🍅 No Tomatometer score on record",
-    [
+    r && (r.rt != null ? `🍅 ${r.rt}% Tomatometer · ${verdict(r.rt)}` : "🍅 No Tomatometer score on record"),
+    lb && `🎞 Letterboxd ${lb.value.toFixed(1)}/5`,
+    r && [
       r.imdb != null && `⭐ IMDb ${r.imdb}${r.imdbVotes ? ` (${r.imdbVotes.toLocaleString("en-US")} votes)` : ""}`,
       r.metacritic != null && `Ⓜ Metacritic ${r.metacritic}`,
     ].filter(Boolean).join(" · "),
     "Tap to open on Rotten Tomatoes",
   ].filter(Boolean);
 
-  const search = encodeURIComponent(r.title || imdbId);
+  const search = encodeURIComponent((r && r.title) || imdbId);
   return {
     streams: [{
       name: "🍅 Ratings",

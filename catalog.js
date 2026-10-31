@@ -1,9 +1,35 @@
 const { getRatings } = require("./omdb");
+const { getLetterboxd } = require("./mdblist");
 
 const CINEMETA = "https://v3-cinemeta.strem.io";
-const POOL_SIZE = Number(process.env.POOL_SIZE) || 100; // titles re-ranked per type
+const POOL_SIZE = Number(process.env.POOL_SIZE) || 100; // titles re-ranked per list
 const TTL_MS = 12 * 60 * 60 * 1000;
-const ranked = new Map(); // "type:source:year" -> { at, promise }
+const ranked = new Map(); // "metric:type:source:year" -> { at, promise }
+
+// How each list scores and labels a title.
+const METRICS = {
+  rt: {
+    label: "Tomatometer",
+    score: async (id, keys) => {
+      const r = await getRatings(id, keys.omdb);
+      return r && r.rt != null ? { score: r.rt, extra: r.imdb, r } : null;
+    },
+    badge: s => `🍅 ${s.score}%`,
+    line: s => `🍅 ${s.score}%` +
+      (s.r.imdb != null ? ` · ⭐ ${s.r.imdb}` : "") +
+      (s.r.metacritic != null ? ` · Ⓜ ${s.r.metacritic}` : ""),
+  },
+  lb: {
+    label: "Letterboxd",
+    score: async (id, keys) => {
+      const r = await getLetterboxd(id, keys.mdblist);
+      return r ? { score: r.value, extra: r.votes, r } : null;
+    },
+    badge: s => `🎞 ${s.score.toFixed(1)}/5`,
+    line: s => `🎞 Letterboxd ${s.score.toFixed(1)}/5` +
+      (s.r.votes ? ` (${s.r.votes.toLocaleString("en-US")} ratings)` : ""),
+  },
+};
 
 // Popular titles from Stremio's own Cinemeta, paged until we have enough.
 // source "top" = popular right now; source "year" + a year = popular that year.
@@ -28,7 +54,7 @@ async function fetchPool(type, source, year, size) {
   return [...seen.values()].slice(0, size);
 }
 
-// Gentle on OMDb: a handful of requests in flight, never a stampede.
+// Gentle on the rating APIs: a handful of requests in flight, never a stampede.
 async function mapLimit(items, limit, fn) {
   const out = new Array(items.length);
   let next = 0;
@@ -42,17 +68,15 @@ async function mapLimit(items, limit, fn) {
   return out;
 }
 
-async function build(type, source, year, apiKey) {
+async function build(metric, type, source, year, keys) {
+  const m = METRICS[metric];
   const pool = await fetchPool(type, source, year, POOL_SIZE);
-  const rows = await mapLimit(pool, 5, async meta => ({ meta, r: await getRatings(meta.id, apiKey) }));
-  const found = rows.filter(x => x.r).length;
-  const scored = rows.filter(x => x.r && x.r.rt != null).length;
-  console.log(`[catalog] ${type} ${year || source}: ${pool.length} popular titles, ${found} found on OMDb, ${scored} with RT scores`);
+  const rows = (await mapLimit(pool, 5, async meta => ({ meta, s: await m.score(meta.id, keys) }))).filter(x => x.s);
+  console.log(`[catalog] ${metric} ${type} ${year || source}: ${pool.length} popular titles, ${rows.length} with ${m.label} scores`);
 
   return rows
-    .filter(x => x.r && x.r.rt != null)
-    .sort((a, b) => b.r.rt - a.r.rt || (b.r.imdb || 0) - (a.r.imdb || 0))
-    .map(({ meta, r }, i) => ({
+    .sort((a, b) => b.s.score - a.s.score || (b.s.extra || 0) - (a.s.extra || 0))
+    .map(({ meta, s }, i) => ({
       id: meta.id,
       type,
       name: meta.name,
@@ -60,25 +84,20 @@ async function build(type, source, year, apiKey) {
       background: meta.background,
       logo: meta.logo,
       genres: meta.genres,
-      imdbRating: r.imdb != null ? String(r.imdb) : meta.imdbRating,
-      releaseInfo: `🍅 ${r.rt}%${meta.releaseInfo ? ` · ${meta.releaseInfo}` : ""}`,
-      description: [
-        `#${i + 1} by Tomatometer · 🍅 ${r.rt}%` +
-          (r.imdb != null ? ` · ⭐ ${r.imdb}` : "") +
-          (r.metacritic != null ? ` · Ⓜ ${r.metacritic}` : ""),
-        meta.description || "",
-      ].join("\n\n").trim(),
-      _rt: r.rt,
+      imdbRating: meta.imdbRating,
+      releaseInfo: `${m.badge(s)}${meta.releaseInfo ? ` · ${meta.releaseInfo}` : ""}`,
+      description: [`#${i + 1} by ${m.label} · ${m.line(s)}`, meta.description || ""].join("\n\n").trim(),
+      _score: s.score,
     }));
 }
 
-async function getRanked(type, apiKey, { source = "top", year = "" } = {}) {
-  const cacheKey = `${type}:${source}:${year}`;
+async function getRanked(metric, type, keys, { source = "top", year = "" } = {}) {
+  const cacheKey = `${metric}:${type}:${source}:${year}`;
   const hit = ranked.get(cacheKey);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.promise;
 
   // Share one in-flight build between simultaneous requests.
-  const promise = build(type, source, year, apiKey).then(list => {
+  const promise = build(metric, type, source, year, keys).then(list => {
     if (!list.length) ranked.delete(cacheKey); // bad key / outage: retry next time
     return list;
   }).catch(err => {

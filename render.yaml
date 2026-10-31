@@ -8,3 +8,5 @@ services:
     envVars:
       - key: OMDB_API_KEY
         sync: false # Render asks you for this during setup
+      - key: MDBLIST_API_KEY
+        sync: false # optional: enables the Letterboxd list
