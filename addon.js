@@ -12,7 +12,7 @@ const tierExtra = [
 
 const manifest = {
   id: "community.rotten.ratings",
-  version: "1.0.0",
+  version: "1.0.1",
   name: "Rotten Ratings 🍅",
   description: "Popular titles re-ranked by Tomatometer, plus a ratings card (RT · IMDb · Metacritic) on every movie and show.",
   logo: "https://em-content.zobj.net/source/apple/391/tomato_1f345.png",
@@ -20,8 +20,8 @@ const manifest = {
   types: ["movie", "series"],
   idPrefixes: ["tt"],
   catalogs: [
-    { type: "movie", id: "rt-top-movies", name: "🍅 Tomatometer Top", extra: tierExtra },
-    { type: "series", id: "rt-top-series", name: "🍅 Tomatometer Top", extra: tierExtra },
+    { type: "movie", id: "rt-movies-v2", name: "🍅 Tomatometer Top", extra: tierExtra },
+    { type: "series", id: "rt-series-v2", name: "🍅 Tomatometer Top", extra: tierExtra },
   ],
   config: [
     { key: "omdbKey", type: "text", title: "Your OMDb API key (free at omdbapi.com/apikey.aspx)", required: !ENV_KEY },
