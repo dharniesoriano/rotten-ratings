@@ -21,19 +21,19 @@ const yearExtra = [
 ];
 
 const catalogs = [
-  { type: "movie", id: "rt-movies-v2", name: "🍅 Tomatometer Top", extra: tierExtra },
-  { type: "series", id: "rt-series-v2", name: "🍅 Tomatometer Top", extra: tierExtra },
-  { type: "movie", id: "rt-year-movies", name: "🍅 Best by Year", extra: yearExtra },
-  { type: "series", id: "rt-year-series", name: "🍅 Best by Year", extra: yearExtra },
+  { type: "movie", id: "rt-movies-v3", name: "🍅 Tomatometer Top", extra: tierExtra },
+  { type: "series", id: "rt-series-v3", name: "🍅 Tomatometer Top", extra: tierExtra },
+  { type: "movie", id: "rt-year-movies-v3", name: "🍅 Best by Year", extra: yearExtra },
+  { type: "series", id: "rt-year-series-v3", name: "🍅 Best by Year", extra: yearExtra },
 ];
 // Letterboxd only covers films, and only appears once an MDBList key is set.
 if (MDBLIST_KEY) {
-  catalogs.push({ type: "movie", id: "lb-year-movies", name: "🎞 Letterboxd Best by Year", extra: yearExtra });
+  catalogs.push({ type: "movie", id: "lb-year-movies-v3", name: "🎞 Letterboxd Best by Year", extra: yearExtra });
 }
 
 const manifest = {
   id: "community.rotten.ratings",
-  version: "1.4.0",
+  version: "1.4.1",
   name: "Rotten Ratings 🍅",
   description: "Popular titles re-ranked by Tomatometer and Letterboxd, with year filters, plus a ratings card on every movie and show.",
   logo: "https://em-content.zobj.net/source/apple/391/tomato_1f345.png",
@@ -59,7 +59,7 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config }) => {
   const year = YEARS.includes(extra.genre) ? extra.genre : YEARS[0];
   let list = [];
 
-  if (id === "lb-year-movies") {
+  if (id === "lb-year-movies-v3") {
     if (keys.mdblist) list = await getRanked("lb", type, keys, { source: "year", year });
   } else if (keys.omdb) {
     if (id.startsWith("rt-year")) {
@@ -73,7 +73,8 @@ builder.defineCatalogHandler(async ({ type, id, extra = {}, config }) => {
   const metas = list.slice(skip, skip + 100).map(({ _score, ...meta }) => meta);
   // Never let Stremio cache an empty answer: it would hide a fix for hours.
   if (!metas.length) return { metas: [], cacheMaxAge: 0 };
-  return { metas, cacheMaxAge: 6 * 3600, staleRevalidate: 24 * 3600 };
+  // Short cache so updates reach every device within an hour (the server keeps its own 12h cache).
+  return { metas, cacheMaxAge: 3600 };
 });
 
 function verdict(score) {
