@@ -71,6 +71,16 @@ async function mapLimit(items, limit, fn) {
   return out;
 }
 
+// Movies: "Oct 2026" from OMDb's "14 Oct 2026". Series: Cinemeta's run, e.g. "2019–2023".
+function dateLabel(type, released, releaseInfo) {
+  if (type === "movie" && released) {
+    const [, mon, yr] = released.split(" ");
+    if (mon && /^\d{4}$/.test(yr || "")) return `${mon} ${yr}`;
+  }
+  if (releaseInfo) return String(releaseInfo).replace(/-/g, "–").slice(0, 12);
+  return released ? released.slice(-4) : null;
+}
+
 async function build(metric, type, source, year, keys) {
   const m = METRICS[metric];
   const pool = await fetchPool(type, source, year, POOL_SIZE);
@@ -82,20 +92,24 @@ async function build(metric, type, source, year, keys) {
   // Both scores go on every poster, so fetch whichever one this list didn't rank by.
   // Both lookups are cached for 24h, so overlapping lists cost nothing extra.
   await mapLimit(rows, 5, async row => {
+    let omdb;
     if (metric === "rt") {
       row.rt = row.s.score;
+      omdb = row.s.r;
       const lb = type === "movie" && keys.mdblist ? await getLetterboxd(row.meta.id, keys.mdblist) : null;
       row.lb = lb ? lb.value : null;
     } else {
       row.lb = row.s.score;
-      const r = keys.omdb ? await getRatings(row.meta.id, keys.omdb) : null;
-      row.rt = r && r.rt != null ? r.rt : null;
+      omdb = keys.omdb ? await getRatings(row.meta.id, keys.omdb) : null;
+      row.rt = omdb && omdb.rt != null ? omdb.rt : null;
     }
+    row.date = dateLabel(type, omdb && omdb.released, row.meta.releaseInfo);
   });
 
-  return rows.map(({ meta, s, rt, lb }, i) => {
+  return rows.map(({ meta, s, rt, lb, date }, i) => {
     registerSource(meta.id, meta.poster);
-    const q = [rt != null && `rt=${rt}`, lb != null && `lb=${lb}`].filter(Boolean).join("&");
+    const q = [rt != null && `rt=${rt}`, lb != null && `lb=${lb}`, date && `d=${encodeURIComponent(date)}`]
+      .filter(Boolean).join("&");
     const scores = [rt != null && `🍅 ${rt}%`, lb != null && `🎞 ${lb.toFixed(1)}/5`].filter(Boolean).join(" · ");
     return {
       id: meta.id,

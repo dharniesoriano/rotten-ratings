@@ -1,6 +1,6 @@
 {
   "name": "stremio-rotten-ratings",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Stremio addon: Rotten Tomatoes-ranked catalogs + ratings card on every title",
   "main": "server.js",
   "scripts": {

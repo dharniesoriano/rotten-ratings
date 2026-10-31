@@ -33,7 +33,7 @@ if (MDBLIST_KEY) {
 
 const manifest = {
   id: "community.rotten.ratings",
-  version: "1.3.0",
+  version: "1.4.0",
   name: "Rotten Ratings 🍅",
   description: "Popular titles re-ranked by Tomatometer and Letterboxd, with year filters, plus a ratings card on every movie and show.",
   logo: "https://em-content.zobj.net/source/apple/391/tomato_1f345.png",
@@ -96,6 +96,7 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
   const lines = [
     r && (r.rt != null ? `🍅 ${r.rt}% Tomatometer · ${verdict(r.rt)}` : "🍅 No Tomatometer score on record"),
     lb && `🎞 Letterboxd ${lb.value.toFixed(1)}/5`,
+    r && r.released && `📅 Released ${r.released}`,
     r && [
       r.imdb != null && `⭐ IMDb ${r.imdb}${r.imdbVotes ? ` (${r.imdbVotes.toLocaleString("en-US")} votes)` : ""}`,
       r.metacritic != null && `Ⓜ Metacritic ${r.metacritic}`,

@@ -16,10 +16,12 @@ app.get("/poster/:id.jpg", async (req, res) => {
 
   const rt = /^\d{1,3}$/.test(req.query.rt || "") ? Math.min(100, Number(req.query.rt)) : null;
   const lbNum = Number(req.query.lb);
+  const d = typeof req.query.d === "string" ? req.query.d.trim() : "";
+  const date = /^[A-Za-z0-9 –-]{1,14}$/.test(d) ? d : null;
   const lb = req.query.lb && Number.isFinite(lbNum) && lbNum > 0 && lbNum <= 5 ? lbNum : null;
 
   try {
-    const jpeg = await renderPoster(id, rt, lb);
+    const jpeg = await renderPoster(id, rt, lb, date);
     if (!jpeg) return res.redirect(302, `https://images.metahub.space/poster/medium/${id}/img`);
     res.set({ "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=604800" });
     res.end(jpeg);

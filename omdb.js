@@ -19,6 +19,7 @@ function parse(data) {
     imdb: num(data.imdbRating, parseFloat),                     // "8.1" -> 8.1
     imdbVotes: num(data.imdbVotes, s => parseInt(s, 10)),
     metacritic: num(data.Metascore, s => parseInt(s, 10)),
+    released: data.Released && data.Released !== "N/A" ? data.Released : null, // "14 Oct 1994"
   };
 }
 
